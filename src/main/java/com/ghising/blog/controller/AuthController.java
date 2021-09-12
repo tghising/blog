@@ -2,10 +2,12 @@ package com.ghising.blog.controller;
 
 import com.ghising.blog.model.Role;
 import com.ghising.blog.model.User;
+import com.ghising.blog.payload.JWTAuthResponse;
 import com.ghising.blog.payload.LoginDto;
 import com.ghising.blog.payload.SignUpDto;
 import com.ghising.blog.repository.RoleRepository;
 import com.ghising.blog.repository.UserRepository;
+import com.ghising.blog.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,13 +38,20 @@ public class AuthController {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private JwtTokenProvider tokenProvider;
+
     @PostMapping("/signin")
-    public ResponseEntity<String> authenticateUser(@RequestBody LoginDto loginDto) {
+    public ResponseEntity<JWTAuthResponse> authenticateUser(@RequestBody LoginDto loginDto) {
         Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
                 loginDto.getUsernameOrEmail(), loginDto.getPassword()));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        return new ResponseEntity<>("User signed-in successfully!.", HttpStatus.OK);
+
+        // get token form tokenProvider
+        String token = tokenProvider.generateToken(authentication);
+
+        return ResponseEntity.ok(new JWTAuthResponse(token));
     }
 
     @PostMapping("/signup")
@@ -50,12 +59,12 @@ public class AuthController {
 
         // add check for username exists in a DB
         if (userRepository.existsByUsername(signUpDto.getUsername())) {
-            return new ResponseEntity<>("Username is already taken!.", HttpStatus.BAD_REQUEST);
+            return new ResponseEntity<>("Username is already taken!", HttpStatus.BAD_REQUEST);
         }
 
-        // add check for email exists in a DB
+        // add check for email exists in DB
         if (userRepository.existsByEmail(signUpDto.getEmail())) {
-            return new ResponseEntity<>("Email is already taken!.", HttpStatus.BAD_REQUEST);
+            return new ResponseEntity<>("Email is already taken!", HttpStatus.BAD_REQUEST);
         }
 
         // create user object
@@ -63,13 +72,13 @@ public class AuthController {
         user.setName(signUpDto.getName());
         user.setUsername(signUpDto.getUsername());
         user.setEmail(signUpDto.getEmail());
-        user.setPassword(passwordEncoder.encode(signUpDto.getPassword())); // encode the password when save to DB
+        user.setPassword(passwordEncoder.encode(signUpDto.getPassword()));
 
         Role roles = roleRepository.findByName("ROLE_ADMIN").get();
-        user.setRoles(Collections.singleton(roles)); // by default set role as ADMIN
+        user.setRoles(Collections.singleton(roles));
 
         userRepository.save(user);
-        return new ResponseEntity<>("User registered successfully!.", HttpStatus.OK);
+
+        return new ResponseEntity<>("User registered successfully", HttpStatus.OK);
     }
 }
-
